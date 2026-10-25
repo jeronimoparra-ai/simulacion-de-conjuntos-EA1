@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Simulación interactiva para aprender conjuntos, operaciones entre conjuntos y diagramas de Venn.">
+<title>Simulación de conjuntos</title>
+<style>
+  :root {
+    --color-a: #007bff;
+    --color-a-trans: rgba(0, 123, 255, 0.2);
+    --color-b: #ff7f00;
+    --color-b-trans: rgba(255, 127, 0, 0.2);
+    --bg: #ffffff;
+    --text: #333333;
+    --border: #ccc;
+    --card-bg: #f9f9f9;
+    --acierto: #28a745;
+    --fallo: #dc3545;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a1a;
+      --text: #f0f0f0;
+      --border: #555;
+      --card-bg: #333;
+    }
+  }
+
+  body {
+    margin: 0; padding: 10px; font-family: system-ui, sans-serif;
+    background-color: var(--bg); color: var(--text);
+  }
+  header { margin-bottom: 15px; }
+  .controles-reglas { margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap; }
+  select { padding: 5px; font-size: 1rem; background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+  .pestanas { display: flex; gap: 5px; margin-bottom: 15px; flex-wrap: wrap; }
+  button {
+    min-height: 40px; padding: 0 15px; cursor: pointer;
+    background: var(--card-bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px; font-size: 1rem;
+  }
+  button:hover:not(:disabled) { filter: brightness(0.9); }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  button.activo { background: var(--color-a); color: white; border-color: var(--color-a); }
+  .seccion { display: none; }
+  .seccion.visible { display: block; }
+
+  /* MODO CONSTRUIR */
+  #escenario {
+    position: relative; width: 100%; max-width: 600px; aspect-ratio: 4/3;
+    background: var(--bg); border: 2px solid var(--border);
+    margin: 0 auto 15px auto; overflow: hidden; touch-action: none; user-select: none;
+  }
+  svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+  .carta {
+    position: absolute; width: 8%; aspect-ratio: 1;
+    background: var(--card-bg); border: 1px solid var(--text); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: bold; cursor: grab; transform: translate(-50%, -50%);
+    box-shadow: 1px 1px 3px rgba(0,0,0,0.3); font-size: clamp(12px, 4vw, 20px);
+    touch-action: none;
+  }
+  .carta:active { cursor: grabbing; }
+  .panel-resultados { padding: 10px; border: 1px solid var(--border); background: var(--card-bg); border-radius: 4px; }
+  .oculto { display: none !important; }
+  .acciones { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .conjunto-a { color: var(--color-a); font-weight: bold; }
+  .conjunto-b { color: var(--color-b); font-weight: bold; }
+  #mensaje-construir { font-weight: bold; margin-top: 10px; }
+
+  /* MODO DESCUBRIR Y RETO */
+  .grid-numeros {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); gap: 10px; margin-bottom: 15px; max-width: 400px;
+  }
+  .grid-numeros button { font-size: 1.2rem; font-weight: bold; }
+  #registro-descubrir {
+    min-height: 80px; max-height: 150px; overflow-y: auto;
+    border: 1px solid var(--border); padding: 10px; background: var(--card-bg);
+    margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start;
+  }
+  .registro-item { padding: 5px 10px; border-radius: 4px; background: var(--bg); border: 1px solid var(--border); }
+  .adivinar-controles { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 15px; }
+  .mensaje { font-weight: bold; font-size: 1.1rem; }
+  .btn-seleccionado { background-color: var(--color-a); color: white; border-color: var(--color-a); }
+  .marcador { font-size: 1.2rem; font-weight: bold; margin-bottom: 15px; }
+
+  @media (max-width: 480px) {
+    body { padding: 8px; }
+    .controles-reglas label, .adivinar-controles label { display: flex; flex-direction: column; gap: 4px; }
+    .acciones button { flex: 1 1 auto; }
+    .carta { width: 9%; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h2>Simulación de conjuntos</h2>
+  <div class="controles-reglas">
+    <label>Regla A (<span class="conjunto-a">azul</span>):
+      <select id="reglaA"></select>
+    </label>
+    <label>Regla B (<span class="conjunto-b">naranja</span>):
+      <select id="reglaB"></select>
+    </label>
+  </div>
+  <div class="pestanas">
+    <button id="btn-construir" class="activo" onclick="cambiarPestana('construir')">Construir</button>
+    <button id="btn-descubrir" onclick="cambiarPestana('descubrir')">Descubrir</button>
+    <button id="btn-reto" onclick="cambiarPestana('reto')">Reto</button>
+  </div>
+</header>
+
+<main>
+  <!-- MODO CONSTRUIR -->
+  <div id="modo-construir" class="seccion visible">
+    <div class="acciones">
+      <button onclick="verificarCriterios()">Verificar con mis criterios</button>
+      <button onclick="reiniciarEscenario()">Reiniciar</button>
+    </div>
+    <p id="mensaje-construir"></p>
+    <div id="escenario">
+      <svg viewBox="0 0 160 120" aria-label="Diagrama de Venn para los conjuntos A y B">
+        <rect x="2" y="2" width="156" height="116" fill="none" stroke="currentColor" stroke-width="1" />
+        <text x="5" y="12" font-size="6" fill="currentColor">U</text>
+        <circle cx="62" cy="45" r="34" fill="var(--color-a-trans)" stroke="var(--color-a)" stroke-width="1.5" />
+        <text x="32" y="20" font-size="6" fill="var(--color-a)" font-weight="bold">A</text>
+        <circle cx="98" cy="45" r="34" fill="var(--color-b-trans)" stroke="var(--color-b)" stroke-width="1.5" />
+        <text x="124" y="20" font-size="6" fill="var(--color-b)" font-weight="bold">B</text>
+      </svg>
+    </div>
+
+    <div id="notacion" class="panel-resultados oculto">
+      <p><strong>A</strong> = <span id="out-a"></span> | <strong>B</strong> = <span id="out-b"></span></p>
+      <p><strong>A ∩ B</strong> (intersección) = <span id="out-inter"></span></p>
+      <p><strong>A ∪ B</strong> (unión) = <span id="out-union"></span></p>
+      <p><strong>A − B</strong> (diferencia) = <span id="out-dif"></span></p>
+      <p><strong>A′</strong> (complemento) = <span id="out-comp"></span></p>
+      <p><strong>Fuera de A y B</strong> = <span id="out-fuera"></span></p>
+      <hr>
+      <p><strong>Identidad de cardinales:</strong> n(A ∪ B) = n(A) + n(B) − n(A ∩ B)</p>
+      <p><span id="out-identidad"></span> <span id="out-check"></span></p>
+    </div>
+  </div>
+
+  <!-- MODO DESCUBRIR -->
+  <div id="modo-descubrir" class="seccion">
+    <div class="acciones">
+      <button onclick="iniciarDescubrir()">Nueva ronda</button>
+    </div>
+    <p>Toca un número para saber si pertenece al conjunto oculto <strong>C</strong>.</p>
+    <div class="grid-numeros" id="grid-descubrir"></div>
+    <div id="registro-descubrir"></div>
+    <div class="adivinar-controles">
+      <label>Mi respuesta: C = <select id="select-adivinar"></select></label>
+      <button id="btn-adivinar" onclick="adivinarC()">Adivinar</button>
+    </div>
+    <p id="mensaje-descubrir" class="mensaje"></p>
+  </div>
+
+  <!-- MODO RETO -->
+  <div id="modo-reto" class="seccion">
+    <div class="acciones">
+      <button onclick="generarReto()">Otro reto</button>
+    </div>
+    <div class="marcador">Aciertos: <span id="reto-aciertos">0</span> / <span id="reto-total">0</span></div>
+    <p class="mensaje" style="font-size: 1.3rem;">Selecciona los elementos para: <strong id="reto-operacion-texto">Operación = ?</strong></p>
+    <div class="grid-numeros" id="grid-reto"></div>
+    <div class="acciones" style="margin-top: 15px;">
+      <button id="btn-comprobar-reto" class="activo" onclick="comprobarReto()">Comprobar</button>
+    </div>
+    <p id="mensaje-reto" class="mensaje"></p>
+  </div>
+</main>
+
+<script>
+// --- DATOS Y ARQUITECTURA GLOBAL ---
+const U = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const RULES = [
+  { id: 'primo', texto: 'ser número primo', fn: n => [2,3,5,7,11].includes(n) },
+  { id: 'mayor6', texto: 'ser mayor que 6', fn: n => n > 6 },
+  { id: 'menor8', texto: 'ser menor que 8', fn: n => n < 8 },
+  { id: 'impar', texto: 'ser impar', fn: n => n % 2 !== 0 },
+  { id: 'mult4', texto: 'ser múltiplo de 4', fn: n => n % 4 === 0 },
+  { id: 'cuadrado', texto: 'ser cuadrado perfecto', fn: n => [1,4,9].includes(n) },
+  { id: 'div12', texto: 'ser divisor de 12', fn: n => 12 % n === 0 }
+];
+const OP_RETO = ['A ∩ B', 'A ∪ B', 'A − B', 'B − A', 'A′', 'B′'];
+
+const estado = {
+  reglaA: 'primo',
+  reglaB: 'mayor6',
+  modo: 'construir',
+  posiciones: {},
+  huboMovimiento: false,
+  descubrir: { regla: null, preguntas: {}, terminado: false },
+  reto: { operacion: '', seleccionados: [], aciertos: 0, total: 0 }
+};
+
+// --- FUNCIONES PURAS ---
+function extension(fn) { return U.filter(fn).sort((a, b) => a - b); }
+function formato(arr) { return arr.length === 0 ? '∅' : '{' + arr.join(', ') + '}'; }
+function interseccion(a, b) { return a.filter(x => b.includes(x)).sort((x, y) => x - y); }
+function union(a, b) { return [...new Set([...a, ...b])].sort((x, y) => x - y); }
+function diferencia(a, b) { return a.filter(x => !b.includes(x)).sort((x, y) => x - y); }
+function complemento(a) { return U.filter(x => !a.includes(x)).sort((x, y) => x - y); }
+
+// --- INICIALIZACIÓN ---
+const selectA = document.getElementById('reglaA');
+const selectB = document.getElementById('reglaB');
+const selectAdivinar = document.getElementById('select-adivinar');
+
+RULES.forEach(r => {
+  selectA.add(new Option(r.texto, r.id));
+  selectB.add(new Option(r.texto, r.id));
+  selectAdivinar.add(new Option(r.texto, r.id));
+});
+selectA.value = estado.reglaA;
+selectB.value = estado.reglaB;
+
+selectA.addEventListener('change', e => {
+  estado.reglaA = e.target.value;
+  document.getElementById('mensaje-construir').textContent = '';
+  generarReto();
+});
+selectB.addEventListener('change', e => {
+  estado.reglaB = e.target.value;
+  document.getElementById('mensaje-construir').textContent = '';
+  generarReto();
+});
+
+function cambiarPestana(modo) {
+  estado.modo = modo;
+  document.querySelectorAll('.pestanas button').forEach(b => b.classList.remove('activo'));
+  document.querySelectorAll('.seccion').forEach(s => s.classList.remove('visible'));
+  document.getElementById('btn-' + modo).classList.add('activo');
+  document.getElementById('modo-' + modo).classList.add('visible');
+}
+
+// --- MODO CONSTRUIR ---
+const escenario = document.getElementById('escenario');
+let cartaActiva = null;
+
+function crearCartas() {
+  U.forEach((n, i) => {
+    const carta = document.createElement('div');
+    carta.className = 'carta';
+    carta.textContent = n;
+    carta.dataset.n = n;
+    escenario.appendChild(carta);
+
+    carta.addEventListener('pointerdown', e => {
+      cartaActiva = carta;
+      carta.style.zIndex = 100;
+      carta.setPointerCapture(e.pointerId);
+    });
+    carta.addEventListener('pointermove', onPointerMove);
+
+    const handlePointerUp = e => {
+      if (cartaActiva === carta) {
+        if (carta.hasPointerCapture(e.pointerId)) carta.releasePointerCapture(e.pointerId);
+        carta.style.zIndex = '';
+        cartaActiva = null;
+        estado.huboMovimiento = true;
+        document.getElementById('mensaje-construir').textContent = '';
+        renderizar();
+      }
+    };
+    carta.addEventListener('pointerup', handlePointerUp);
+    carta.addEventListener('pointercancel', handlePointerUp);
+  });
+  reiniciarEscenario();
+}
+
+function onPointerMove(e) {
+  if (!cartaActiva) return;
+  const rect = escenario.getBoundingClientRect();
+  let x = ((e.clientX - rect.left) / rect.width) * 160;
+  let y = ((e.clientY - rect.top) / rect.height) * 120;
+  x = Math.max(7, Math.min(153, x));
+  y = Math.max(7, Math.min(113, y));
+
+  const n = parseInt(cartaActiva.dataset.n);
+  estado.posiciones[n] = { x, y };
+  cartaActiva.style.left = ((x / 160) * 100) + '%';
+  cartaActiva.style.top = ((y / 120) * 100) + '%';
+}
+
+function reiniciarEscenario() {
+  estado.huboMovimiento = false;
+  document.getElementById('notacion').classList.add('oculto');
+  document.getElementById('mensaje-construir').textContent = '';
+  const espacio = 140 / 11;
+  const cartas = escenario.querySelectorAll('.carta');
+  cartas.forEach((carta, i) => {
+    const n = parseInt(carta.dataset.n);
+    const x = 10 + i * espacio;
+    const y = 104;
+    estado.posiciones[n] = { x, y };
+    carta.style.left = ((x / 160) * 100) + '%';
+    carta.style.top = ((y / 120) * 100) + '%';
+  });
+}
+
+function zona(n) {
+  const pos = estado.posiciones[n];
+  const dxA = pos.x - 62, dyA = pos.y - 45;
+  const dxB = pos.x - 98, dyB = pos.y - 45;
+  const inA = Math.sqrt(dxA * dxA + dyA * dyA) <= 34;
+  const inB = Math.sqrt(dxB * dxB + dyB * dyB) <= 34;
+  if (inA && inB) return "A y B";
+  if (inA) return "solo A";
+  if (inB) return "solo B";
+  return "fuera";
+}
+
+function renderizar() {
+  const notacion = document.getElementById('notacion');
+  if (!estado.huboMovimiento) {
+    notacion.classList.add('oculto');
+    return;
+  }
+  notacion.classList.remove('oculto');
+
+  let conjA = [], conjB = [], fueraAmbos = [];
+  U.forEach(n => {
+    const z = zona(n);
+    if (z === "solo A" || z === "A y B") conjA.push(n);
+    if (z === "solo B" || z === "A y B") conjB.push(n);
+    if (z === "fuera") fueraAmbos.push(n);
+  });
+
+  const inter = interseccion(conjA, conjB);
+  const uni = union(conjA, conjB);
+
+  document.getElementById('out-a').textContent = formato(conjA);
+  document.getElementById('out-b').textContent = formato(conjB);
+  document.getElementById('out-inter').textContent = formato(inter);
+  document.getElementById('out-union').textContent = formato(uni);
+  document.getElementById('out-dif').textContent = formato(diferencia(conjA, conjB));
+  document.getElementById('out-comp').textContent = formato(complemento(conjA));
+  document.getElementById('out-fuera').textContent = formato(fueraAmbos);
+
+  const textIden = uni.length + ' = ' + conjA.length + ' + ' + conjB.length + ' − ' + inter.length;
+  const validaIden = uni.length === (conjA.length + conjB.length - inter.length);
+  document.getElementById('out-identidad').textContent = textIden;
+  document.getElementById('out-check').textContent = validaIden ? '✓' : '✗';
+  document.getElementById('out-check').style.color = validaIden ? 'green' : 'red';
+}
+
+function verificarCriterios() {
+  const msgEl = document.getElementById('mensaje-construir');
+  if (!estado.huboMovimiento) {
+    msgEl.textContent = "Primero mueve las cartas a los aros.";
+    msgEl.style.color = "var(--fallo)";
+    return;
+  }
+
+  const fnA = RULES.find(r => r.id === estado.reglaA).fn;
+  const fnB = RULES.find(r => r.id === estado.reglaB).fn;
+  let errores = [];
+
+  U.forEach(n => {
+    const esperadoA = fnA(n);
+    const esperadoB = fnB(n);
+    let zonaEsperada = "fuera";
+    if (esperadoA && esperadoB) zonaEsperada = "A y B";
+    else if (esperadoA) zonaEsperada = "solo A";
+    else if (esperadoB) zonaEsperada = "solo B";
+
+    if (zona(n) !== zonaEsperada) errores.push(n + ' (debía ir a ' + zonaEsperada + ')');
+  });
+
+  if (errores.length === 0) {
+    msgEl.textContent = "¡Todas correctas ✓!";
+    msgEl.style.color = "var(--acierto)";
+  } else {
+    msgEl.textContent = "Errores en: " + errores.join(', ');
+    msgEl.style.color = "var(--fallo)";
+  }
+}
+
+// --- MODO DESCUBRIR ---
+function iniciarDescubrir() {
+  const indiceAzar = Math.floor(Math.random() * RULES.length);
+  estado.descubrir = { regla: RULES[indiceAzar], preguntas: {}, terminado: false };
+
+  const grid = document.getElementById('grid-descubrir');
+  grid.innerHTML = '';
+  U.forEach(n => {
+    const btn = document.createElement('button');
+    btn.textContent = n;
+    btn.id = 'btn-desc-' + n;
+    btn.onclick = () => preguntarC(n);
+    grid.appendChild(btn);
+  });
+
+  document.getElementById('registro-descubrir').innerHTML = '';
+  document.getElementById('mensaje-descubrir').textContent = '';
+  selectAdivinar.disabled = false;
+  selectAdivinar.selectedIndex = 0;
+  document.getElementById('btn-adivinar').disabled = false;
+}
+
+function preguntarC(n) {
+  if (estado.descubrir.terminado || estado.descubrir.preguntas[n] !== undefined) return;
+  const pertenece = estado.descubrir.regla.fn(n);
+  estado.descubrir.preguntas[n] = pertenece;
+
+  const btn = document.getElementById('btn-desc-' + n);
+  btn.disabled = true;
+  btn.style.backgroundColor = pertenece ? 'var(--acierto)' : 'var(--fallo)';
+  btn.style.color = 'white';
+  btn.style.borderColor = pertenece ? 'var(--acierto)' : 'var(--fallo)';
+
+  const registro = document.getElementById('registro-descubrir');
+  const item = document.createElement('div');
+  item.className = 'registro-item';
+  item.innerHTML = pertenece ? '<strong>' + n + ' ∈ C</strong>' : n + ' ∉ C';
+  item.style.color = pertenece ? 'var(--acierto)' : 'var(--fallo)';
+  registro.appendChild(item);
+}
+
+function adivinarC() {
+  if (estado.descubrir.terminado) return;
+  const reglaElegida = RULES.find(r => r.id === selectAdivinar.value);
+  const arrElegido = extension(reglaElegida.fn);
+  const arrReal = extension(estado.descubrir.regla.fn);
+  const esCorrecto = arrElegido.length === arrReal.length && arrElegido.every((val, i) => val === arrReal[i]);
+  const msg = document.getElementById('mensaje-descubrir');
+
+  if (esCorrecto) {
+    estado.descubrir.terminado = true;
+    msg.textContent = '¡Correcto! C = ' + formato(arrReal) + '. Intentos: ' + Object.keys(estado.descubrir.preguntas).length + '.';
+    msg.style.color = 'var(--acierto)';
+    selectAdivinar.disabled = true;
+    document.getElementById('btn-adivinar').disabled = true;
+    U.forEach(n => {
+      const btn = document.getElementById('btn-desc-' + n);
+      if (btn) btn.disabled = true;
+    });
+  } else {
+    msg.textContent = 'Incorrecto. Sigue preguntando o intenta otra regla.';
+    msg.style.color = 'var(--fallo)';
+  }
+}
+
+// --- MODO RETO ---
+function generarReto() {
+  const indiceAzar = Math.floor(Math.random() * OP_RETO.length);
+  estado.reto.operacion = OP_RETO[indiceAzar];
+  estado.reto.seleccionados = [];
+
+  document.getElementById('reto-operacion-texto').textContent = estado.reto.operacion + ' = ?';
+  document.getElementById('mensaje-reto').textContent = '';
+  document.getElementById('btn-comprobar-reto').disabled = false;
+
+  const grid = document.getElementById('grid-reto');
+  grid.innerHTML = '';
+  U.forEach(n => {
+    const btn = document.createElement('button');
+    btn.textContent = n;
+    btn.id = 'btn-reto-' + n;
+    btn.onclick = () => toggleReto(n);
+    grid.appendChild(btn);
+  });
+}
+
+function toggleReto(n) {
+  if (document.getElementById('btn-comprobar-reto').disabled) return;
+  const btn = document.getElementById('btn-reto-' + n);
+  const idx = estado.reto.seleccionados.indexOf(n);
+
+  if (idx === -1) {
+    estado.reto.seleccionados.push(n);
+    btn.classList.add('btn-seleccionado');
+  } else {
+    estado.reto.seleccionados.splice(idx, 1);
+    btn.classList.remove('btn-seleccionado');
+  }
+}
+
+function comprobarReto() {
+  const fnA = RULES.find(r => r.id === estado.reglaA).fn;
+  const fnB = RULES.find(r => r.id === estado.reglaB).fn;
+  const conjA = extension(fnA);
+  const conjB = extension(fnB);
+
+  let correctoArr = [];
+  switch(estado.reto.operacion) {
+    case 'A ∩ B': correctoArr = interseccion(conjA, conjB); break;
+    case 'A ∪ B': correctoArr = union(conjA, conjB); break;
+    case 'A − B': correctoArr = diferencia(conjA, conjB); break;
+    case 'B − A': correctoArr = diferencia(conjB, conjA); break;
+    case 'A′': correctoArr = complemento(conjA); break;
+    case 'B′': correctoArr = complemento(conjB); break;
+  }
+
+  const seleccion = [...estado.reto.seleccionados].sort((a, b) => a - b);
+  const esCorrecto = seleccion.length === correctoArr.length && seleccion.every((val, i) => val === correctoArr[i]);
+
+  estado.reto.total++;
+  const msg = document.getElementById('mensaje-reto');
+
+  if (esCorrecto) {
+    estado.reto.aciertos++;
+    msg.textContent = '¡Correcto! ' + estado.reto.operacion + ' = ' + formato(correctoArr);
+    msg.style.color = 'var(--acierto)';
+  } else {
+    msg.textContent = 'Casi. El resultado correcto es ' + estado.reto.operacion + ' = ' + formato(correctoArr);
+    msg.style.color = 'var(--fallo)';
+  }
+
+  document.getElementById('reto-aciertos').textContent = estado.reto.aciertos;
+  document.getElementById('reto-total').textContent = estado.reto.total;
+  document.getElementById('btn-comprobar-reto').disabled = true;
+}
+
+// Iniciar aplicación
+crearCartas();
+iniciarDescubrir();
+generarReto();
+</script>
+</body>
+</html>
